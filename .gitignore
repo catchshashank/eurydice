@@ -1,0 +1,35 @@
+# Environment
+.env
+
+# Large data files — download separately (Amazon Reviews 2023)
+*.jsonl.gz
+*.jsonl
+
+# Generated / processed data
+data/processed/
+data/raw/
+
+# Trained model weights
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

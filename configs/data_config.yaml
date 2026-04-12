@@ -1,0 +1,78 @@
+# Qualitative threshold mappings for structured filter extraction (Table 2 equivalent).
+# Adapted from Siddiqui et al. (2026) for the Clothing domain.
+# Values are [inclusive_min, inclusive_max]; null means unbounded.
+
+thresholds:
+  rating:
+    low:    [0.0,  3.9]
+    medium: [4.0,  5.0]
+    high:   [4.5,  5.0]
+
+  review_count:
+    low:    [0,    99]
+    medium: [100,  null]
+    high:   [1000, null]
+
+  # Clothing price tiers (replacing paper's Cell Phone / Accessory split)
+  price:
+    low:    [0.0,  25.0]
+    medium: [25.0, 75.0]
+    high:   [75.0, null]
+
+# Clothing subcategory taxonomy used for filter extraction and subcategory labelling.
+# Gemini Flash is prompted to assign each product to exactly one of these.
+subcategories:
+  - Tops
+  - Bottoms
+  - Dresses
+  - Outerwear
+  - Activewear
+  - Underwear & Sleepwear
+  - Shoes & Footwear
+  - Accessories
+
+# Pipeline I/O paths (relative to repo root)
+paths:
+  raw_metadata:      data/raw/meta_Amazon_Fashion.jsonl.gz
+  raw_reviews:       data/raw/Amazon_Fashion.jsonl.gz
+  catalog:           data/processed/catalog.jsonl          # 100-product sample after prep
+  synthetic_queries: data/processed/synthetic_queries.jsonl
+  enriched_queries:  data/processed/enriched_queries.jsonl
+  filter_pairs:      data/processed/filter_pairs.jsonl
+  embedding_model:   models/embedding/
+  filter_model:      models/filter_extractor/
+  faiss_index:       models/faiss.index
+  faiss_id_map:      models/faiss_id_map.json
+  test_queries:      data/processed/test_queries.jsonl
+  eval_results:      data/processed/eval_results.json
+
+# Sampling
+catalog:
+  n_products: 100
+
+# Synthetic query generation
+synthetic:
+  queries_per_product: 10
+  batch_size: 10          # products per Gemini API call
+
+# Embedding fine-tuning
+embedding:
+  base_model: sentence-transformers/multi-qa-MiniLM-L6-cos-v1
+  batch_size: 168
+  epochs: 1
+
+# Filter extractor fine-tuning
+filter_extractor:
+  base_model: google/flan-t5-small
+  batch_size: 8
+  epochs: 3
+  eval_split: 0.016       # ~1000 pairs held out for evaluation
+
+# Retrieval
+retrieval:
+  top_k: 10
+  nprobe: 10              # IVF-Flat n_probe parameter
+
+# Evaluation
+evaluation:
+  k_values: [1, 2, 3, 5, 10]
