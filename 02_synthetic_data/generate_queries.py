@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-import google.generativeai as genai
+from google import genai
 import yaml
 from dotenv import load_dotenv
 
@@ -49,15 +49,11 @@ Output the queries in simple bullet points.
 {products_block}
 """
 
-ENRICH_PROMPT = """\
+ENRICH_PROMPT_BATCH = """\
 You are enriching clothing product search queries with shopping constraints.
 
-For the query below, add one or more of these constraints naturally into the query:
-- price (e.g. "under $40", "between $20 and $50", "priced around $30")
-- average rating (e.g. "with 4+ stars", "highly rated", "with strong reviews")
-- review count (e.g. "with plenty of reviews", "popular item", "well-reviewed")
-
-Return a JSON object with exactly these fields:
+For EACH query below, add one or more constraints naturally (price, rating, review count).
+Return a JSON array — one object per query — with exactly these fields:
 {{
   "original_query": "<original>",
   "enriched_query": "<query with constraints added naturally>",
@@ -72,8 +68,10 @@ Return a JSON object with exactly these fields:
   }}
 }}
 
-Query: {query}
-Product subcategory: {subcategory}
+Output ONLY the JSON array. No markdown, no extra text.
+
+Queries (subcategory in parentheses):
+{queries_block}
 """
 
 
@@ -106,15 +104,18 @@ def parse_raw_queries(text: str, valid_asins: set) -> list[dict]:
     current_asin = None
     for line in text.splitlines():
         line = line.strip()
-        if line.startswith("parent_asin:"):
-            asin = line.split(":", 1)[1].strip()
-            current_asin = asin if asin in valid_asins else None
-        elif line.startswith("- ") and current_asin:
-            pairs.append({"parent_asin": current_asin, "query": line[2:].strip()})
+        # Match bare ASIN line (with or without "parent_asin:" prefix)
+        candidate = line.removeprefix("parent_asin:").strip()
+        if candidate in valid_asins:
+            current_asin = candidate
+        elif line.startswith(("- ", "* ", "• ")) and current_asin:
+            query = line[2:].strip()
+            if query:
+                pairs.append({"parent_asin": current_asin, "query": query})
     return pairs
 
 
-def generate_raw_queries(catalog: list[dict], model, batch_size: int, queries_per_product: int) -> list[dict]:
+def generate_raw_queries(catalog: list[dict], client, batch_size: int, queries_per_product: int) -> list[dict]:
     all_pairs = []
     valid_asins = {p["parent_asin"] for p in catalog}
     asin_to_text = {p["parent_asin"]: p.get("product_text", "") for p in catalog}
@@ -124,7 +125,7 @@ def generate_raw_queries(catalog: list[dict], model, batch_size: int, queries_pe
         log.info(f"Generating queries for products {i + 1}–{i + len(batch)} ...")
         prompt = RAW_QUERY_PROMPT.format(products_block=build_products_block(batch))
         try:
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
             pairs = parse_raw_queries(response.text, valid_asins)
             for pair in pairs:
                 pair["product_text"] = asin_to_text[pair["parent_asin"]]
@@ -137,40 +138,56 @@ def generate_raw_queries(catalog: list[dict], model, batch_size: int, queries_pe
     return all_pairs
 
 
-def enrich_queries(pairs: list[dict], catalog: list[dict], model) -> tuple[list[dict], list[dict]]:
+def enrich_queries(pairs: list[dict], catalog: list[dict], client, batch_size: int = 50) -> tuple[list[dict], list[dict]]:
     asin_to_subcategory = {p["parent_asin"]: p.get("subcategory", "") for p in catalog}
+    asin_to_text = {p["parent_asin"]: p.get("product_text", "") for p in catalog}
     enriched_rows = []
     filter_rows = []
 
-    for i, pair in enumerate(pairs):
-        subcategory = asin_to_subcategory.get(pair["parent_asin"], "")
-        prompt = ENRICH_PROMPT.format(query=pair["query"], subcategory=subcategory)
+    for i in range(0, len(pairs), batch_size):
+        batch = pairs[i:i + batch_size]
+        queries_block = "\n".join(
+            f"{j+1}. {p['query']} ({asin_to_subcategory.get(p['parent_asin'], '')})"
+            for j, p in enumerate(batch)
+        )
+        prompt = ENRICH_PROMPT_BATCH.format(queries_block=queries_block)
         try:
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
             text = response.text.strip()
-            # Strip markdown code fences if present
             if text.startswith("```"):
                 text = "\n".join(text.split("\n")[1:])
             if text.endswith("```"):
-                text = "\n".join(text.split("\n")[:-1])
-            data = json.loads(text)
-            enriched_rows.append({
-                "parent_asin": pair["parent_asin"],
-                "product_text": pair["product_text"],
-                "original_query": pair["query"],
-                "enriched_query": data.get("enriched_query", pair["query"]),
-            })
-            filter_rows.append({
-                "parent_asin": pair["parent_asin"],
-                "enriched_query": data.get("enriched_query", pair["query"]),
-                "structured_filters": data.get("structured_filters", {}),
-            })
+                text = text.rsplit("```", 1)[0].strip()
+            results = json.loads(text)
+            for pair, item in zip(batch, results):
+                enriched_rows.append({
+                    "parent_asin": pair["parent_asin"],
+                    "product_text": asin_to_text.get(pair["parent_asin"], pair.get("product_text", "")),
+                    "original_query": pair["query"],
+                    "enriched_query": item.get("enriched_query", pair["query"]),
+                })
+                filter_rows.append({
+                    "parent_asin": pair["parent_asin"],
+                    "enriched_query": item.get("enriched_query", pair["query"]),
+                    "structured_filters": item.get("structured_filters", {}),
+                })
         except Exception as e:
-            log.warning(f"Enrich error on pair {i}: {e}")
-            time.sleep(2)
+            log.warning(f"Enrich error on batch {i}–{i+len(batch)}: {e}")
+            # Fall back: keep original queries without enrichment
+            for pair in batch:
+                enriched_rows.append({
+                    "parent_asin": pair["parent_asin"],
+                    "product_text": asin_to_text.get(pair["parent_asin"], pair.get("product_text", "")),
+                    "original_query": pair["query"],
+                    "enriched_query": pair["query"],
+                })
+                filter_rows.append({
+                    "parent_asin": pair["parent_asin"],
+                    "enriched_query": pair["query"],
+                    "structured_filters": {},
+                })
 
-        if (i + 1) % 50 == 0:
-            log.info(f"Enriched {i + 1}/{len(pairs)} queries ...")
+        log.info(f"Enriched {min(i + batch_size, len(pairs))}/{len(pairs)} queries ...")
 
     return enriched_rows, filter_rows
 
@@ -188,8 +205,7 @@ def main():
         sys.exit(1)
 
     cfg = load_config(args.config)
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    client = genai.Client(api_key=api_key)
 
     catalog_path = cfg["paths"]["catalog"]
     catalog = load_catalog(catalog_path)
@@ -203,7 +219,7 @@ def main():
     if args.stage in ("raw", "both"):
         pairs = generate_raw_queries(
             catalog,
-            model,
+            client,
             batch_size=cfg["synthetic"]["batch_size"],
             queries_per_product=cfg["synthetic"]["queries_per_product"],
         )
@@ -219,7 +235,7 @@ def main():
         log.info(f"Loaded {len(pairs)} existing raw pairs from {syn_path}")
 
     if args.stage in ("enrich", "both"):
-        enriched, filter_pairs = enrich_queries(pairs, catalog, model)
+        enriched, filter_pairs = enrich_queries(pairs, catalog, client)
         with open(enr_path, "w", encoding="utf-8") as f:
             for r in enriched:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")

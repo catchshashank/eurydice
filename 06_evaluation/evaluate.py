@@ -59,7 +59,7 @@ def main():
 
     # Import retrieval logic
     import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+    sys.path.insert(0, str(Path(__file__).parent.parent / "05_retrieval"))
     from retrieve import retrieve, load_catalog  # noqa: E402
 
     cfg = load_config(args.config)

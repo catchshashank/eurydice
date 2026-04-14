@@ -109,6 +109,8 @@ def main():
         save_strategy="epoch",
         load_best_model_at_end=True,
         logging_steps=10,
+        dataloader_num_workers=0,   # avoid multiprocessing crash on Windows
+        use_cpu=True,
     )
 
     trainer = Seq2SeqTrainer(
@@ -116,7 +118,7 @@ def main():
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=eval_ds,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
 
     log.info("Starting Flan-T5-small fine-tuning ...")

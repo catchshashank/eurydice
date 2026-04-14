@@ -28,42 +28,91 @@ def load_config(path: str) -> dict:
 
 
 def load_pairs(jsonl_path: str) -> tuple[list[str], list[str]]:
+    """Load query-product pairs, deduplicating on query only (products repeat across queries)."""
     queries, products = [], []
-    seen_queries, seen_products = set(), set()
+    seen_queries = set()
     with open(jsonl_path, encoding="utf-8") as f:
         for line in f:
             row = json.loads(line)
             q = row["query"]
             p = row["product_text"]
-            if q not in seen_queries and p not in seen_products:
+            if q not in seen_queries:
                 queries.append(q)
                 products.append(p)
                 seen_queries.add(q)
-                seen_products.add(p)
     return queries, products
 
 
 def finetune(queries, products, base_model, output_dir, epochs, batch_size):
-    from sentence_transformers import SentenceTransformer, InputExample
-    from sentence_transformers.losses import MultipleNegativesRankingLoss
-    from torch.utils.data import DataLoader
+    import os
+    os.environ["TRANSFORMERS_NO_TF"] = "1"
+    os.environ["USE_TORCH"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-    model = SentenceTransformer(base_model)
-    examples = [InputExample(texts=[q, p]) for q, p in zip(queries, products)]
-    loader = DataLoader(examples, shuffle=True, batch_size=batch_size)
-    loss = MultipleNegativesRankingLoss(model)
+    import random
+    import torch
+    import torch.nn.functional as F
+    from transformers import AutoModel, AutoTokenizer
+    from sentence_transformers import SentenceTransformer, models as st_models
+    from torch.optim import AdamW
 
-    warmup = math.ceil(len(loader) * epochs * 0.1)
-    log.info(f"Training: {len(examples)} pairs, batch={batch_size}, epochs={epochs}, warmup={warmup}")
+    HF_NAME = f"sentence-transformers/{base_model}" if "/" not in base_model else base_model
+    log.info(f"Loading tokenizer and model from {HF_NAME} ...")
+    tokenizer = AutoTokenizer.from_pretrained(HF_NAME)
+    transformer = AutoModel.from_pretrained(HF_NAME)
+    device = torch.device("cpu")
+    transformer.to(device)
 
-    model.fit(
-        train_objectives=[(loader, loss)],
-        epochs=epochs,
-        warmup_steps=warmup,
-        show_progress_bar=True,
-        output_path=output_dir,
-    )
-    return model
+    optimizer = AdamW(transformer.parameters(), lr=2e-5)
+    effective_batch = min(batch_size, len(queries))
+    log.info(f"Training: {len(queries)} pairs, batch={effective_batch}, epochs={epochs}")
+
+    def encode_texts(texts):
+        enc = tokenizer(
+            texts, padding=True, truncation=True,
+            max_length=128, return_tensors="pt"
+        )
+        enc = {k: v.to(device) for k, v in enc.items()}
+        out = transformer(**enc)
+        token_emb = out.last_hidden_state
+        mask = enc["attention_mask"].unsqueeze(-1).float()
+        emb = (token_emb * mask).sum(1) / mask.sum(1).clamp(min=1e-9)
+        return F.normalize(emb, p=2, dim=1)
+
+    pairs = list(zip(queries, products))
+    transformer.train()
+    for epoch in range(epochs):
+        random.shuffle(pairs)
+        epoch_loss, n_batches = 0.0, 0
+        for i in range(0, len(pairs), effective_batch):
+            batch = pairs[i:i + effective_batch]
+            if len(batch) < 2:
+                continue
+            q_batch, p_batch = zip(*batch)
+            q_emb = encode_texts(list(q_batch))
+            p_emb = encode_texts(list(p_batch))
+            scores = q_emb @ p_emb.T
+            labels = torch.arange(len(q_batch), device=device)
+            loss_val = F.cross_entropy(scores, labels)
+            optimizer.zero_grad()
+            loss_val.backward()
+            optimizer.step()
+            epoch_loss += loss_val.item()
+            n_batches += 1
+            log.info(f"  epoch {epoch+1} batch {n_batches} loss={loss_val.item():.4f}")
+        log.info(f"Epoch {epoch+1}/{epochs} avg_loss={epoch_loss/max(1,n_batches):.4f}")
+
+    # Build SentenceTransformer by copying trained weights (avoids Windows safetensors file-lock)
+    word_emb = st_models.Transformer(HF_NAME, max_seq_length=128)
+    word_emb.auto_model.load_state_dict(transformer.state_dict())
+    pooling = st_models.Pooling(word_emb.get_word_embedding_dimension(), pooling_mode_mean_tokens=True)
+    st_model = SentenceTransformer(modules=[word_emb, pooling], device="cpu")
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    st_model.save(output_dir)
+    log.info(f"SentenceTransformer saved to {output_dir}")
+    return st_model
 
 
 def build_faiss_index(model, catalog_path: str, index_path: str, id_map_path: str):
@@ -103,11 +152,11 @@ def build_faiss_index(model, catalog_path: str, index_path: str, id_map_path: st
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/data_config.yaml")
-    parser.add_argument("--data", default=None, help="Path to synthetic_queries.jsonl")
-    parser.add_argument("--output", default=None, help="Path to save fine-tuned model")
+    parser.add_argument("--data", default=None)
+    parser.add_argument("--output", default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
-    parser.add_argument("--skip-index", action="store_true", help="Skip FAISS index build")
+    parser.add_argument("--skip-index", action="store_true")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -123,10 +172,9 @@ def main():
 
     log.info(f"Loading pairs from {data_path} ...")
     queries, products = load_pairs(data_path)
-    log.info(f"Loaded {len(queries)} deduplicated pairs.")
+    log.info(f"Loaded {len(queries)} pairs.")
 
     model = finetune(queries, products, base_model, output_dir, epochs, batch_size)
-    log.info(f"Model saved to {output_dir}")
 
     if not args.skip_index:
         build_faiss_index(

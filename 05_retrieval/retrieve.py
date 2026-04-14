@@ -107,7 +107,11 @@ def extract_filters(query: str, tokenizer, model) -> dict:
         output_ids = model.generate(**inputs, max_new_tokens=256)
     text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     try:
-        return json.loads(text)
+        result = json.loads(text)
+        if isinstance(result, dict):
+            return result
+        log.warning(f"Filter model returned non-dict JSON: {text!r}")
+        return {}
     except json.JSONDecodeError:
         log.warning(f"Could not parse filter JSON: {text!r}")
         return {}
@@ -127,17 +131,22 @@ def retrieve(query: str, catalog, embedding_model, faiss_index, id_map, tokenize
     query_embedding = embedding_model.encode([query], normalize_embeddings=True)
     query_embedding = np.array(query_embedding, dtype="float32")
 
+    # Search all products then post-filter to matching IDs (efficient for small catalogs)
     faiss_index.nprobe = 10
-    sel = __import__("faiss").IDSelectorBatch(np.array(matching_ids, dtype="int64"))
-    params = __import__("faiss").SearchParametersIVF(sel=sel)
-    scores, indices = faiss_index.search_with_params(top_k, query_embedding, params)
+    n_search = len(catalog)
+    scores, indices = faiss_index.search(query_embedding, n_search)
 
+    matching_set = set(matching_ids)
     results = []
     for score, idx in zip(scores[0], indices[0]):
         if idx == -1:
             continue
+        if int(idx) not in matching_set:
+            continue
         asin = id_map.get(str(idx), id_map.get(idx))
         results.append({"rank": len(results) + 1, "parent_asin": asin, "score": float(score)})
+        if len(results) >= top_k:
+            break
     return results
 
 

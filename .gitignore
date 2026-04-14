@@ -3,14 +3,19 @@
 
 # Large data files — download separately (Amazon Reviews 2023)
 *.jsonl.gz
-*.jsonl
 
-# Generated / processed data
-data/processed/
+# Raw data only (too large)
 data/raw/
 
-# Trained model weights
-models/
+# Generated / processed data — committed to repo for reproducibility
+# (individual *.jsonl files are tracked; only raw downloads excluded)
+
+# Trained model weights (too large for GitHub — reproduce via pipeline)
+models/embedding/
+models/filter_extractor/
+# FAISS index + ID map are small — committed
+!models/faiss.index
+!models/faiss_id_map.json
 
 # Python
 __pycache__/

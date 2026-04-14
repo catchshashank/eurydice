@@ -16,9 +16,10 @@ import logging
 import random
 import re
 import sys
+import time
 from pathlib import Path
 
-import google.generativeai as genai
+from google import genai
 import yaml
 from dotenv import load_dotenv
 import os
@@ -71,28 +72,50 @@ def sample_products(gz_path: str, n: int, seed: int) -> list[dict]:
 
 
 def assign_subcategories(products: list[dict], subcategories: list[str], api_key: str) -> list[dict]:
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    cats_str = "\n".join(f"- {c}" for c in subcategories)
+    client = genai.Client(api_key=api_key)
+    cats_str = ", ".join(subcategories)
 
-    for product in products:
-        prompt = (
-            f"You are a clothing product classifier.\n"
-            f"Assign the following product to exactly one subcategory from this list:\n"
-            f"{cats_str}\n\n"
-            f"Product title: {product.get('title', '')}\n"
-            f"Features: {' '.join(product.get('features', []) or [])}\n\n"
-            f"Reply with only the subcategory name, nothing else."
-        )
+    lines = []
+    for p in products:
+        title = p.get("title", "")
+        features = " ".join(p.get("features", []) or [])[:200]
+        lines.append(f'{p["parent_asin"]}: {title} | {features}')
+    products_block = "\n".join(lines)
+
+    prompt = (
+        f"Classify each clothing product into exactly one of these subcategories: {cats_str}.\n"
+        f"Reply with one line per product in the format: parent_asin<TAB>subcategory\n"
+        f"Use only the exact subcategory names listed above. No extra text.\n\n"
+        f"{products_block}"
+    )
+
+    MAX_RETRIES = 5
+    for attempt in range(MAX_RETRIES):
         try:
-            response = model.generate_content(prompt)
-            assigned = response.text.strip()
-            if assigned not in subcategories:
-                assigned = subcategories[0]
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            break
         except Exception as e:
-            log.warning(f"Gemini error for {product.get('parent_asin')}: {e}")
-            assigned = subcategories[0]
-        product["subcategory"] = assigned
+            wait = 60 * (attempt + 1)
+            log.warning(f"Gemini error (attempt {attempt + 1}/{MAX_RETRIES}): {e}\nRetrying in {wait}s ...")
+            time.sleep(wait)
+    else:
+        log.error("All Gemini retries failed. Defaulting all subcategories.")
+        for p in products:
+            p["subcategory"] = subcategories[0]
+        return products
+
+    # Parse response
+    asin_to_sub = {}
+    for line in response.text.strip().splitlines():
+        parts = line.split("\t")
+        if len(parts) == 2:
+            asin, sub = parts[0].strip(), parts[1].strip()
+            if sub in subcategories:
+                asin_to_sub[asin] = sub
+
+    for p in products:
+        p["subcategory"] = asin_to_sub.get(p["parent_asin"], subcategories[0])
+        log.info(f"  {p['parent_asin']}: {p['subcategory']}")
 
     return products
 

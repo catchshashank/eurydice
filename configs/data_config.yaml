@@ -58,7 +58,7 @@ synthetic:
 # Embedding fine-tuning
 embedding:
   base_model: sentence-transformers/multi-qa-MiniLM-L6-cos-v1
-  batch_size: 168
+  batch_size: 16
   epochs: 1
 
 # Filter extractor fine-tuning
