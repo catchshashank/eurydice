@@ -148,13 +148,6 @@
 <!-- Hero -->
 <section class="hero">
   <h1>Fashion search that<br><span>understands language</span></h1>
-  <p>Hybrid LLM + FAISS retrieval — combining fine-tuned sentence embeddings with structured filter extraction to match natural-language queries to clothing products.</p>
-  <div class="pill-row">
-    <span class="pill">100 Amazon Fashion products</span>
-    <span class="pill">Flan-T5 filter extraction</span>
-    <span class="pill">FAISS semantic index</span>
-    <span class="pill">Precision@1 = 0.61</span>
-  </div>
 </section>
 
 <!-- Search -->
@@ -213,15 +206,6 @@
         <h3>What is Eurydice?</h3>
         <p>Eurydice is a hybrid semantic search engine for Amazon Fashion products. It combines dense vector retrieval with structured filter extraction to match natural-language queries — like "affordable rain boots for women" — to the most relevant clothing items.</p>
         <p style="margin-top:0.8rem;">The pipeline uses Gemini Flash to generate synthetic training data, fine-tunes a sentence transformer for embedding-based similarity, and trains a Flan-T5 model to extract structured filters (price, rating, subcategory) from free-text queries.</p>
-      </div>
-      <div class="about-card">
-        <h3>How it works</h3>
-        <ul>
-          <li>Natural-language queries are parsed into structured filters by a fine-tuned Flan-T5 model</li>
-          <li>Matching products are pre-selected using those filters</li>
-          <li>A FAISS index ranks the filtered subset by semantic similarity</li>
-          <li>Top results are returned with rating, review, and category metadata</li>
-        </ul>
       </div>
     </div>
     <div class="cta-row">
