@@ -266,75 +266,54 @@ function productCard(p, score) {
   </div>`;
 }
 
-// ── TF-IDF-style search ───────────────────────────────────────────────────────
-const STOPWORDS = new Set(['a','an','the','and','or','in','on','for','to','of','with','is','are','i','me','my','s','looking','find','want','need','show','best','good']);
-function tokenize(txt) {
-  return (txt || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !STOPWORDS.has(t));
-}
+// ── API search ────────────────────────────────────────────────────────────────
+const API = 'https://catchshashank-eurydice-api.hf.space';
 
-// Build inverted index
-const invertedIndex = {};
-catalog.forEach((p, idx) => {
-  const tokens = tokenize(p.title + ' ' + p.subcategory + ' ' + (p.reviews || '') + ' ' + (p.rating || ''));
-  const tf = {};
-  tokens.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
-  Object.keys(tf).forEach(t => {
-    if (!invertedIndex[t]) invertedIndex[t] = [];
-    invertedIndex[t].push({ idx, tf: tf[t] });
-  });
-});
-const df = Object.fromEntries(Object.entries(invertedIndex).map(([t, hits]) => [t, hits.length]));
-const N = catalog.length;
-
-function search(query, topK = 5) {
-  const qTokens = tokenize(query);
-  if (!qTokens.length) return [];
-  const scores = new Float32Array(N);
-  qTokens.forEach(qt => {
-    const hits = invertedIndex[qt] || [];
-    const idf = Math.log((N + 1) / ((df[qt] || 0) + 1)) + 1;
-    hits.forEach(({ idx, tf }) => {
-      scores[idx] += tf * idf;
-    });
-  });
-  const ranked = [...scores.entries()].filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).slice(0, topK);
-  const maxScore = ranked[0]?.[1] || 1;
-  return ranked.map(([idx, s]) => ({ product: catalog[idx], score: s / maxScore }));
-}
-
-// ── Render helpers ────────────────────────────────────────────────────────────
-function renderResults(results, header) {
+function renderResults(results, header, filters) {
   const container = document.getElementById('results-container');
   if (!results.length) {
     container.innerHTML = `<div class="empty-state"><div class="icon">😕</div><p>No results found. Try a different query.</p></div>`;
     return;
   }
+  const filterBadges = filters ? Object.entries(filters)
+    .filter(([, v]) => v !== null)
+    .map(([k, v]) => `<span class="badge badge-cat" style="margin-right:0.3rem">${k.replace(/_/g,' ')}: ${v}</span>`)
+    .join('') : '';
   container.innerHTML = `
     <div class="results-header">
-      <h2>${header}</h2>
+      <h2>Results for "${header}"</h2>
       <span>${results.length} result${results.length !== 1 ? 's' : ''}</span>
     </div>
+    ${filterBadges ? `<div style="margin-bottom:1rem;font-size:0.78rem;color:var(--muted)">Extracted filters: ${filterBadges}</div>` : ''}
     <div class="products-grid">${results.map(r => productCard(r.product, r.score)).join('')}</div>`;
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
-function doSearch(query) {
+function setSearchLoading(loading) {
+  const btn = document.getElementById('search-btn');
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="spinner"></span>' : 'Search';
+}
+
+async function doSearch(query) {
   if (!query.trim()) return;
   document.getElementById('search-input').value = query;
   showTab('results');
-  // Check if this is a demo query with ground truth
-  const demo = demos.find(d => d.query.toLowerCase() === query.toLowerCase());
-  let results;
-  if (demo && demo.products.length) {
-    // Show ground-truth products first, then semantic matches
-    const gtAsins = new Set(demo.products.map(p => p.asin));
-    const gtResults = demo.products.map(p => ({ product: p, score: 1.0 }));
-    const semantic = search(query, 8).filter(r => !gtAsins.has(r.product.asin)).slice(0, 5 - gtResults.length);
-    results = [...gtResults, ...semantic];
-  } else {
-    results = search(query, 5);
+  setSearchLoading(true);
+  document.getElementById('results-container').innerHTML =
+    `<div class="empty-state"><div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto 1rem"></div><p>Running Flan-T5 + FAISS retrieval…</p></div>`;
+  try {
+    const res = await fetch(`${API}/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const maxScore = data.results[0]?.score || 1;
+    const results = data.results.map(r => ({ product: r, score: r.score / maxScore }));
+    renderResults(results, query, data.filters);
+  } catch (err) {
+    document.getElementById('results-container').innerHTML =
+      `<div class="empty-state"><div class="icon">⚠️</div><p>Could not reach the search API.</p><p style="font-size:0.8rem;margin-top:0.5rem;color:var(--muted)">${err.message}</p></div>`;
+  } finally {
+    setSearchLoading(false);
   }
-  renderResults(results, `Results for "${query}"`);
 }
 
 document.getElementById('search-btn').addEventListener('click', () => {
