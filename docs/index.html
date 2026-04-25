@@ -105,12 +105,27 @@
   .pipe-arrow { color: var(--muted); font-size: 1.1rem; }
 
   /* ── About ── */
-  .about-grid { display: grid; grid-template-columns: minmax(0, 600px); gap: 1.5rem; justify-content: center; }
-  .about-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
-  .about-card h3 { font-size: 0.95rem; margin-bottom: 0.8rem; }
-  .about-card p, .about-card li { font-size: 0.85rem; color: var(--muted); line-height: 1.7; }
-  .about-card ul { padding-left: 1.2rem; }
-  .cta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  .about-grid { display: grid; grid-template-columns: minmax(0, 620px); justify-content: center; }
+  .about-card {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    overflow: hidden;
+  }
+  .about-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .about-card h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
+  .about-card p { font-size: 0.9rem; color: var(--muted); line-height: 1.8; }
+  .about-card p + p { margin-top: 0.9rem; }
+  .about-divider { border: none; border-top: 1px solid var(--border); margin: 1.75rem 0; }
+  .cta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
   .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.7rem 1.3rem; border-radius: 8px; font-size: 0.85rem; font-weight: 600; text-decoration: none; transition: opacity 0.2s; }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
@@ -200,21 +215,17 @@
 <!-- About -->
 <div id="about-section">
   <div class="section">
-    <h2 style="margin-bottom:1.5rem;">About</h2>
     <div class="about-grid">
       <div class="about-card">
         <h3>What is Eurydice?</h3>
         <p>Eurydice is a hybrid semantic search engine for Amazon Fashion products. It combines dense vector retrieval with structured filter extraction to match natural-language queries — like "affordable rain boots for women" — to the most relevant clothing items.</p>
-        <p style="margin-top:0.8rem;">The pipeline uses Gemini Flash to generate synthetic training data, fine-tunes a sentence transformer for embedding-based similarity, and trains a Flan-T5 model to extract structured filters (price, rating, subcategory) from free-text queries.</p>
+        <p>The pipeline uses Gemini Flash to generate synthetic training data, fine-tunes a sentence transformer for embedding-based similarity, and trains a Flan-T5 model to extract structured filters (price, rating, subcategory) from free-text queries.</p>
+        <hr class="about-divider">
+        <div class="cta-row">
+          <a class="btn btn-primary" href="mailto:shashank.dubey@hec.edu">✉ Get in touch</a>
+          <a class="btn btn-secondary" href="https://colab.research.google.com/github/catchshashank/eurydice/blob/main/eurydice_colab.ipynb" target="_blank">▶ Run in Colab</a>
+        </div>
       </div>
-    </div>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="mailto:shashank.dubey@hec.edu">
-        ✉ Get in touch
-      </a>
-      <a class="btn btn-secondary" href="https://colab.research.google.com/github/catchshashank/eurydice/blob/main/eurydice_colab.ipynb" target="_blank">
-        ▶ Run in Colab
-      </a>
     </div>
   </div>
 </div>
