@@ -105,8 +105,7 @@
   .pipe-arrow { color: var(--muted); font-size: 1.1rem; }
 
   /* ── About ── */
-  .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-  @media (max-width: 640px) { .about-grid { grid-template-columns: 1fr; } }
+  .about-grid { display: grid; grid-template-columns: minmax(0, 600px); gap: 1.5rem; justify-content: center; }
   .about-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
   .about-card h3 { font-size: 0.95rem; margin-bottom: 0.8rem; }
   .about-card p, .about-card li { font-size: 0.85rem; color: var(--muted); line-height: 1.7; }
@@ -148,6 +147,7 @@
 <!-- Hero -->
 <section class="hero">
   <h1>Fashion search that<br><span>understands language</span></h1>
+  <p style="color:var(--muted);font-size:0.95rem;margin-top:1rem;">Type a natural-language query below — or pick a suggestion — to find matching products from the catalog.</p>
 </section>
 
 <!-- Search -->
