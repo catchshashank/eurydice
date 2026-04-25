@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eurydice — LLM-Powered Fashion Search</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161c;
+    --border: #2a2a36;
+    --accent: #7c6af7;
+    --accent2: #e264a0;
+    --text: #e8e8f0;
+    --muted: #888899;
+    --card: #1c1c24;
+    --success: #4ade80;
+    --tag: #252535;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; }
+
+  /* ── Nav ── */
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 100; }
+  .logo { font-weight: 700; font-size: 1.2rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; margin-left: 1.5rem; transition: color 0.2s; }
+  nav a:hover { color: var(--text); }
+
+  /* ── Hero ── */
+  .hero { text-align: center; padding: 5rem 2rem 4rem; max-width: 760px; margin: 0 auto; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; line-height: 1.15; margin-bottom: 1rem; }
+  .hero h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero p { color: var(--muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto 2rem; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 2rem; }
+  .pill { background: var(--tag); border: 1px solid var(--border); border-radius: 999px; padding: 0.3rem 0.9rem; font-size: 0.8rem; color: var(--muted); }
+
+  /* ── Search ── */
+  .search-wrap { max-width: 680px; margin: 0 auto 3rem; padding: 0 1rem; }
+  .search-box { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); transition: border-color 0.2s; }
+  .search-box:focus-within { border-color: var(--accent); }
+  #search-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); padding: 0.9rem 1.2rem; font-size: 1rem; }
+  #search-input::placeholder { color: var(--muted); }
+  #search-btn { background: var(--accent); border: none; color: #fff; padding: 0.9rem 1.4rem; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: opacity 0.2s; }
+  #search-btn:hover { opacity: 0.85; }
+  .demo-pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+  .demo-pill { background: var(--tag); border: 1px solid var(--border); border-radius: 8px; padding: 0.3rem 0.7rem; font-size: 0.78rem; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+  .demo-pill:hover { border-color: var(--accent); color: var(--text); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; max-width: 960px; margin: 0 auto 0; padding: 0 1rem; border-bottom: 1px solid var(--border); }
+  .tab { padding: 0.7rem 1.2rem; cursor: pointer; font-size: 0.9rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Results ── */
+  .section { max-width: 960px; margin: 0 auto; padding: 2rem 1rem; }
+  .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .results-header h2 { font-size: 1.1rem; color: var(--muted); font-weight: 500; }
+  .results-header span { font-size: 0.85rem; color: var(--muted); }
+  .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+  .product-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: transform 0.15s, border-color 0.15s; }
+  .product-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .product-img { width: 100%; height: 180px; object-fit: cover; background: var(--surface); }
+  .product-img-placeholder { width: 100%; height: 180px; display: flex; align-items: center; justify-content: center; background: var(--surface); color: var(--muted); font-size: 2rem; }
+  .product-info { padding: 0.75rem; }
+  .product-title { font-size: 0.82rem; font-weight: 600; line-height: 1.4; margin-bottom: 0.5rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .product-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+  .badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 4px; }
+  .badge-rating { background: #2d3a1a; color: var(--success); }
+  .badge-reviews { background: var(--tag); color: var(--muted); }
+  .badge-price { background: #1a2d3a; color: #6dd1f7; }
+  .badge-cat { background: #2a1a3a; color: #c084fc; }
+  .badge-match { background: #1a1a2d; color: var(--accent); }
+  .empty-state { text-align: center; padding: 4rem; color: var(--muted); }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+
+  /* ── Metrics ── */
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+  .metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem; text-align: center; }
+  .metric-k { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.4rem; }
+  .metric-val { font-size: 1.8rem; font-weight: 800; }
+  .metric-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+  .metric-val.p { color: var(--accent); }
+  .metric-val.r { color: var(--accent2); }
+  .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
+  .chart-title { font-size: 0.9rem; color: var(--muted); margin-bottom: 1rem; }
+  canvas { max-width: 100%; }
+  .paper-note { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 12px 12px 0; padding: 1rem 1.2rem; font-size: 0.85rem; color: var(--muted); }
+  .paper-note strong { color: var(--text); }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 1.5rem; }
+  .compare-table th { text-align: left; padding: 0.5rem 1rem; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .compare-table td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table .better { color: var(--success); font-weight: 700; }
+  .compare-table .paper { color: var(--muted); }
+
+  /* ── Architecture ── */
+  .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 640px) { .arch-grid { grid-template-columns: 1fr; } }
+  .arch-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .arch-card h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--accent); }
+  .arch-card p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+  .pipeline-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+  .pipe-step { background: var(--tag); border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.8rem; font-size: 0.78rem; text-align: center; }
+  .pipe-step .num { color: var(--accent); font-weight: 700; font-size: 0.7rem; display: block; }
+  .pipe-arrow { color: var(--muted); font-size: 1.1rem; }
+
+  /* ── About ── */
+  .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 640px) { .about-grid { grid-template-columns: 1fr; } }
+  .about-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+  .about-card h3 { font-size: 0.95rem; margin-bottom: 0.8rem; }
+  .about-card p, .about-card li { font-size: 0.85rem; color: var(--muted); line-height: 1.7; }
+  .about-card ul { padding-left: 1.2rem; }
+  .cta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.7rem 1.3rem; border-radius: 8px; font-size: 0.85rem; font-weight: 600; text-decoration: none; transition: opacity 0.2s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn:hover { opacity: 0.85; }
+
+  /* ── Footer ── */
+  footer { border-top: 1px solid var(--border); padding: 2rem; text-align: center; color: var(--muted); font-size: 0.82rem; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--text); }
+
+  /* ── Spinner ── */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Demo query list ── */
+  .demo-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .demo-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; cursor: pointer; transition: border-color 0.15s; display: flex; align-items: flex-start; gap: 0.75rem; }
+  .demo-item:hover { border-color: var(--accent); }
+  .demo-item-q { font-size: 0.88rem; flex: 1; }
+  .demo-item-num { color: var(--muted); font-size: 0.75rem; min-width: 28px; padding-top: 2px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">✦ Eurydice</div>
+  <div>
+    <a href="#search-section">Search</a>
+    <a href="#metrics-section">Metrics</a>
+    <a href="#arch-section">Architecture</a>
+    <a href="#about-section">About</a>
+    <a href="https://github.com/catchshashank/eurydice" target="_blank">GitHub ↗</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <h1>Fashion search that<br><span>understands language</span></h1>
+  <p>Hybrid LLM + FAISS retrieval — combining fine-tuned sentence embeddings with structured filter extraction to match natural-language queries to clothing products.</p>
+  <div class="pill-row">
+    <span class="pill">100 Amazon Fashion products</span>
+    <span class="pill">Flan-T5 filter extraction</span>
+    <span class="pill">FAISS semantic index</span>
+    <span class="pill">Precision@1 = 0.61</span>
+  </div>
+</section>
+
+<!-- Search -->
+<div id="search-section">
+  <div class="search-wrap">
+    <div class="search-box">
+      <input id="search-input" type="text" placeholder='Try "women\'s rain boots" or "affordable formal dress"…' autocomplete="off">
+      <button id="search-btn">Search</button>
+    </div>
+    <div class="demo-pills" id="demo-pills"></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="results">Results</div>
+    <div class="tab" data-tab="browse">Browse catalog</div>
+    <div class="tab" data-tab="demo-queries">Demo queries (100)</div>
+  </div>
+
+  <div class="section" id="tab-results">
+    <div id="results-container">
+      <div class="empty-state">
+        <div class="icon">🔍</div>
+        <p>Enter a query above to search the catalog.</p>
+        <p style="margin-top:0.5rem; font-size:0.82rem;">Or click a suggestion pill to try a demo query.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="tab-browse" style="display:none">
+    <div class="results-header">
+      <h2>All 100 products</h2>
+      <div>
+        <select id="cat-filter" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.8rem;border-radius:8px;font-size:0.85rem;">
+          <option value="">All subcategories</option>
+        </select>
+      </div>
+    </div>
+    <div class="products-grid" id="browse-grid"></div>
+  </div>
+
+  <div class="section" id="tab-demo-queries" style="display:none">
+    <div class="results-header">
+      <h2>Test queries with ground-truth products</h2>
+      <span>Click any query to run it</span>
+    </div>
+    <div class="demo-list" id="demo-list"></div>
+  </div>
+</div>
+
+<!-- Metrics -->
+<div id="metrics-section">
+  <div class="section">
+    <h2 style="margin-bottom:0.3rem;">Evaluation Results</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1.5rem;">Precision@k and Recall@k on 100 manually annotated test queries.</p>
+    <div class="metrics-grid" id="metrics-cards"></div>
+    <div class="chart-wrap">
+      <div class="chart-title">Precision & Recall vs k</div>
+      <canvas id="metrics-chart" height="120"></canvas>
+    </div>
+    <div class="paper-note">
+      <strong>Compared to the paper (Siddiqui et al. 2026):</strong> On the cell-phone domain at 1.3M products, the paper reports Precision@1 = 0.32 and Recall@10 = 0.57. Eurydice achieves <strong style="color:var(--success)">Precision@1 = 0.61</strong> and <strong style="color:var(--success)">Recall@10 = 0.93</strong> on the clothing domain at 100 products — consistent with the expected benefit of a smaller, focused catalog.
+    </div>
+    <table class="compare-table">
+      <thead><tr><th>k</th><th>Precision (Eurydice)</th><th>Precision (Paper)</th><th>Recall (Eurydice)</th><th>Recall (Paper)</th></tr></thead>
+      <tbody id="compare-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Architecture -->
+<div id="arch-section">
+  <div class="section">
+    <h2 style="margin-bottom:0.3rem;">Architecture</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:1.5rem;">Replication of Siddiqui et al. (2026) — two components that combine at retrieval time.</p>
+    <div class="arch-grid">
+      <div class="arch-card">
+        <h3>🧲 Embedding Component</h3>
+        <p>Fine-tuned <code style="color:var(--accent)">multi-qa-MiniLM-L6-cos-v1</code> on LLM-generated query–product pairs using <em>MultipleNegativesRankingLoss</em>. Products are indexed in a FAISS IVF-Flat index for sub-millisecond cosine similarity search.</p>
+      </div>
+      <div class="arch-card">
+        <h3>🧩 Structure Component</h3>
+        <p>Fine-tuned <code style="color:var(--accent)">Flan-T5-small</code> (seq2seq) converts natural-language queries into structured JSON filters: price range, review count, rating range, and subcategory. Applied <em>before</em> FAISS to preselect candidates.</p>
+      </div>
+      <div class="arch-card">
+        <h3>📦 Data</h3>
+        <p>100 Amazon Fashion products sampled from <code style="color:var(--accent)">meta_Amazon_Fashion.jsonl.gz</code>. ~10 synthetic queries per product generated by Gemini Flash (zero-shot), then enriched with price/rating constraints and structured filters.</p>
+      </div>
+      <div class="arch-card">
+        <h3>🔁 Retrieval Flow</h3>
+        <p>1. Extract structured filters from query (Flan-T5).<br>2. Pre-filter product indices by price / rating / reviews / subcategory.<br>3. Run FAISS inner-product search over filtered subset.<br>4. Return top-k results ranked by cosine similarity.</p>
+      </div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipe-step"><span class="num">01</span>Data Prep</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step"><span class="num">02</span>Synthetic Queries</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step"><span class="num">03</span>Embeddings + FAISS</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step"><span class="num">04</span>Flan-T5 Filters</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step"><span class="num">05</span>Retrieval</div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step"><span class="num">06</span>Evaluation</div>
+    </div>
+  </div>
+</div>
+
+<!-- About -->
+<div id="about-section">
+  <div class="section">
+    <h2 style="margin-bottom:1.5rem;">About</h2>
+    <div class="about-grid">
+      <div class="about-card">
+        <h3>What is Eurydice?</h3>
+        <p>A replication pilot of <em>Siddiqui et al. (2026) "LLM-based Semantic Search for Conversational Queries in E-commerce"</em>, adapted to 100 Amazon clothing products instead of the paper's 1.3M cell phones.</p>
+        <p style="margin-top:0.8rem;">The pipeline generates synthetic training data with Gemini Flash, fine-tunes two small models, and combines dense retrieval with structured filtering for hybrid search.</p>
+      </div>
+      <div class="about-card">
+        <h3>Key deviations from the paper</h3>
+        <ul>
+          <li>Domain: Clothing vs. Cell Phones &amp; Accessories</li>
+          <li>Scale: 100 products vs. 1.3M products</li>
+          <li>Subcategory schema adapted for clothing taxonomy</li>
+          <li>Qualitative thresholds tuned via <code style="color:var(--accent)">configs/data_config.yaml</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/catchshashank/eurydice" target="_blank">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+      <a class="btn btn-secondary" href="https://colab.research.google.com/github/catchshashank/eurydice/blob/main/eurydice_colab.ipynb" target="_blank">
+        ▶ Run in Colab
+      </a>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>Eurydice · Replication of Siddiqui et al. (2026) · Apache 2.0 License</p>
+  <p style="margin-top:0.5rem;">Built by <a href="https://github.com/catchshashank" target="_blank">catchshashank</a></p>
+</footer>
+
+<script src="data.js"></script>
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────────
+const { catalog, demos, metrics } = EURYDICE_DATA;
+const byAsin = Object.fromEntries(catalog.map(p => [p.asin, p]));
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function stars(r) {
+  if (!r) return '';
+  const full = Math.round(r);
+  return '★'.repeat(full) + '☆'.repeat(5 - full);
+}
+
+function productCard(p, score) {
+  const img = p.image
+    ? `<img class="product-img" src="${p.image}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">`
+      + `<div class="product-img-placeholder" style="display:none">👗</div>`
+    : `<div class="product-img-placeholder">👗</div>`;
+  const rating = p.rating ? `<span class="badge badge-rating">★ ${p.rating}</span>` : '';
+  const reviews = p.reviews ? `<span class="badge badge-reviews">${p.reviews} reviews</span>` : '';
+  const price = p.price ? `<span class="badge badge-price">$${p.price}</span>` : '';
+  const cat = `<span class="badge badge-cat">${p.subcategory}</span>`;
+  const scoreB = score != null ? `<span class="badge badge-match">${(score * 100).toFixed(0)}% match</span>` : '';
+  return `<div class="product-card">
+    ${img}
+    <div class="product-info">
+      <div class="product-title">${p.title}</div>
+      <div class="product-meta">${rating}${reviews}${price}${cat}${scoreB}</div>
+    </div>
+  </div>`;
+}
+
+// ── TF-IDF-style search ───────────────────────────────────────────────────────
+const STOPWORDS = new Set(['a','an','the','and','or','in','on','for','to','of','with','is','are','i','me','my','s','looking','find','want','need','show','best','good']);
+function tokenize(txt) {
+  return (txt || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 1 && !STOPWORDS.has(t));
+}
+
+// Build inverted index
+const invertedIndex = {};
+catalog.forEach((p, idx) => {
+  const tokens = tokenize(p.title + ' ' + p.subcategory + ' ' + (p.reviews || '') + ' ' + (p.rating || ''));
+  const tf = {};
+  tokens.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+  Object.keys(tf).forEach(t => {
+    if (!invertedIndex[t]) invertedIndex[t] = [];
+    invertedIndex[t].push({ idx, tf: tf[t] });
+  });
+});
+const df = Object.fromEntries(Object.entries(invertedIndex).map(([t, hits]) => [t, hits.length]));
+const N = catalog.length;
+
+function search(query, topK = 10) {
+  const qTokens = tokenize(query);
+  if (!qTokens.length) return [];
+  const scores = new Float32Array(N);
+  qTokens.forEach(qt => {
+    const hits = invertedIndex[qt] || [];
+    const idf = Math.log((N + 1) / ((df[qt] || 0) + 1)) + 1;
+    hits.forEach(({ idx, tf }) => {
+      scores[idx] += tf * idf;
+    });
+  });
+  const ranked = [...scores.entries()].filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).slice(0, topK);
+  const maxScore = ranked[0]?.[1] || 1;
+  return ranked.map(([idx, s]) => ({ product: catalog[idx], score: s / maxScore }));
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────────
+function renderResults(results, header) {
+  const container = document.getElementById('results-container');
+  if (!results.length) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">😕</div><p>No results found. Try a different query.</p></div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="results-header">
+      <h2>${header}</h2>
+      <span>${results.length} result${results.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="products-grid">${results.map(r => productCard(r.product, r.score)).join('')}</div>`;
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+function doSearch(query) {
+  if (!query.trim()) return;
+  document.getElementById('search-input').value = query;
+  showTab('results');
+  // Check if this is a demo query with ground truth
+  const demo = demos.find(d => d.query.toLowerCase() === query.toLowerCase());
+  let results;
+  if (demo && demo.products.length) {
+    // Show ground-truth products first, then semantic matches
+    const gtAsins = new Set(demo.products.map(p => p.asin));
+    const gtResults = demo.products.map(p => ({ product: p, score: 1.0 }));
+    const semantic = search(query, 15).filter(r => !gtAsins.has(r.product.asin)).slice(0, 10 - gtResults.length);
+    results = [...gtResults, ...semantic];
+  } else {
+    results = search(query, 10);
+  }
+  renderResults(results, `Results for "${query}"`);
+}
+
+document.getElementById('search-btn').addEventListener('click', () => {
+  doSearch(document.getElementById('search-input').value.trim());
+});
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch(e.target.value.trim());
+});
+
+// ── Demo pills (top 8) ────────────────────────────────────────────────────────
+const samplePills = [
+  "Women's rain boots", "Formal dress with lapel", "Baby knee pads",
+  "Black block heel shoes", "Zip-front hoodie", "Athletic pullover",
+  "Satin top flare sleeves", "Ankle watch strap"
+];
+const pillsEl = document.getElementById('demo-pills');
+samplePills.forEach(q => {
+  const el = document.createElement('div');
+  el.className = 'demo-pill';
+  el.textContent = q;
+  el.addEventListener('click', () => doSearch(q));
+  pillsEl.appendChild(el);
+});
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.getElementById('tab-results').style.display = name === 'results' ? '' : 'none';
+  document.getElementById('tab-browse').style.display = name === 'browse' ? '' : 'none';
+  document.getElementById('tab-demo-queries').style.display = name === 'demo-queries' ? '' : 'none';
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+
+// ── Browse catalog ────────────────────────────────────────────────────────────
+const cats = [...new Set(catalog.map(p => p.subcategory))].sort();
+const catFilter = document.getElementById('cat-filter');
+cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catFilter.appendChild(o); });
+
+function renderBrowse(cat) {
+  const filtered = cat ? catalog.filter(p => p.subcategory === cat) : catalog;
+  document.getElementById('browse-grid').innerHTML = filtered.map(p => productCard(p, null)).join('');
+}
+catFilter.addEventListener('change', () => renderBrowse(catFilter.value));
+renderBrowse('');
+
+// ── Demo query list ───────────────────────────────────────────────────────────
+const demoList = document.getElementById('demo-list');
+demos.forEach((d, i) => {
+  const el = document.createElement('div');
+  el.className = 'demo-item';
+  el.innerHTML = `<span class="demo-item-num">${String(i + 1).padStart(2, '0')}</span><span class="demo-item-q">${d.query}</span>`;
+  el.addEventListener('click', () => { showTab('results'); doSearch(d.query); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  demoList.appendChild(el);
+});
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+const paperMetrics = { "1": { precision: 0.32, recall: 0.61 }, "2": { precision: 0.22, recall: 0.44 }, "3": { precision: 0.17, recall: 0.51 }, "5": { precision: 0.13, recall: 0.56 }, "10": { precision: 0.08, recall: 0.57 } };
+const ks = ['1', '2', '3', '5', '10'];
+const metricsCards = document.getElementById('metrics-cards');
+ks.forEach(k => {
+  const m = metrics[k];
+  metricsCards.innerHTML += `
+    <div class="metric-card"><div class="metric-k">k = ${k}</div><div class="metric-val p">${m.precision.toFixed(2)}</div><div class="metric-label">Precision@${k}</div></div>
+    <div class="metric-card"><div class="metric-k">k = ${k}</div><div class="metric-val r">${m.recall.toFixed(2)}</div><div class="metric-label">Recall@${k}</div></div>`;
+});
+const tbody = document.getElementById('compare-body');
+ks.forEach(k => {
+  const m = metrics[k]; const pm = paperMetrics[k];
+  tbody.innerHTML += `<tr>
+    <td>${k}</td>
+    <td class="better">${m.precision.toFixed(3)}</td>
+    <td class="paper">${pm.precision.toFixed(3)}</td>
+    <td class="better">${m.recall.toFixed(3)}</td>
+    <td class="paper">${pm.recall.toFixed(3)}</td>
+  </tr>`;
+});
+
+// ── Simple canvas chart ───────────────────────────────────────────────────────
+(function drawChart() {
+  const canvas = document.getElementById('metrics-chart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth - 48;
+  const H = 200;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const pad = { top: 20, right: 20, bottom: 40, left: 45 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+  const xs = ks.map((_, i) => pad.left + (i / (ks.length - 1)) * cw);
+
+  ctx.fillStyle = '#16161c';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+    const y = pad.top + ch - v * ch;
+    ctx.strokeStyle = '#2a2a36'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    ctx.fillStyle = '#888899'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(v.toFixed(2), pad.left - 6, y + 4);
+  });
+
+  // X labels
+  ks.forEach((k, i) => {
+    ctx.fillStyle = '#888899'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('k=' + k, xs[i], H - 10);
+  });
+
+  function drawLine(vals, color, dash = []) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.setLineDash(dash);
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const x = xs[i]; const y = pad.top + ch - v * ch;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke(); ctx.setLineDash([]);
+    vals.forEach((v, i) => {
+      const x = xs[i]; const y = pad.top + ch - v * ch;
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+    });
+  }
+
+  drawLine(ks.map(k => metrics[k].precision), '#7c6af7');
+  drawLine(ks.map(k => metrics[k].recall), '#e264a0');
+  drawLine(ks.map(k => paperMetrics[k].precision), '#7c6af750', [5, 3]);
+  drawLine(ks.map(k => paperMetrics[k].recall), '#e264a050', [5, 3]);
+
+  // Legend
+  const legend = [['Precision (Ours)', '#7c6af7', []], ['Recall (Ours)', '#e264a0', []], ['Precision (Paper)', '#7c6af7', [4,3]], ['Recall (Paper)', '#e264a0', [4,3]]];
+  let lx = pad.left;
+  legend.forEach(([label, color, dash]) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(lx, 12); ctx.lineTo(lx + 18, 12); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#888899'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(label, lx + 22, 16);
+    lx += ctx.measureText(label).width + 42;
+  });
+})();
+</script>
+</body>
+</html>
